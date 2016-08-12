@@ -343,8 +343,12 @@ drawbar(void) {
 		printw(TAG_SYMBOL, tags[i]);
 	}
 
-	attrset(TAG_NORMAL);
+	if (runinall)
+		attrset(TAG_SEL);
+	else
+		attrset(TAG_NORMAL);
 	addstr(layout->symbol);
+	attrset(TAG_NORMAL);
 
 	if(keys) {
 		unsigned int keycount = 0;
@@ -1387,6 +1391,7 @@ togglemouse(const char *args[]) {
 static void
 togglerunall(const char *args[]) {
 	runinall = !runinall;
+	drawbar();
 	draw_all();
 }
 
