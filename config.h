@@ -46,7 +46,7 @@ static Color colors[] = {
 /* scroll back buffer size in lines */
 #define SCROLL_HISTORY 10000
 /* printf format string for the tag in the status bar */
-#define TAG_SYMBOL   "[%s]"
+#define TAG_SYMBOL   " %s "
 /* curses attributes for the currently selected tags */
 #define TAG_SEL      (COLOR(BLUE) | A_BOLD)
 /* curses attributes for not selected tags which contain no windows */
@@ -56,7 +56,7 @@ static Color colors[] = {
 /* curses attributes for not selected tags which with urgent windows */
 #define TAG_URGENT (COLOR(BLUE) | A_NORMAL | A_BLINK)
 /* printf format string for the layout in the status bar */
-#define LAYOUT_SYMBOL "%s"
+#define LAYOUT_SYMBOL " %s "
 
 const char tags[][8] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
 
