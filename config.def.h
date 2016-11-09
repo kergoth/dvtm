@@ -14,11 +14,13 @@
 enum {
 	DEFAULT,
 	BLUE,
+	RED,
 };
 
 static Color colors[] = {
 	[DEFAULT] = { .fg = -1,         .bg = -1, .fg256 = -1, .bg256 = -1, },
 	[BLUE]    = { .fg = COLOR_BLUE, .bg = -1, .fg256 = 68, .bg256 = -1, },
+	[RED]     = { .fg = COLOR_RED,  .bg = -1, .fg256 = 1,  .bg256 = -1, },
 };
 
 #define COLOR(c)        COLOR_PAIR(colors[c].pair)
@@ -27,7 +29,7 @@ static Color colors[] = {
 /* curses attributes for normal (not selected) windows */
 #define NORMAL_ATTR     (COLOR(DEFAULT) | A_NORMAL)
 /* curses attributes for a window with pending urgent flag */
-#define URGENT_ATTR     NORMAL_ATTR
+#define URGENT_ATTR     (COLOR(RED) | A_NORMAL)
 /* curses attributes for the status bar */
 #define BAR_ATTR        (COLOR(BLUE) | A_NORMAL)
 /* characters for beginning and end of status bar message */
@@ -42,7 +44,7 @@ static Color colors[] = {
 /* number of clients in master area */
 #define NMASTER 1
 /* scroll back buffer size in lines */
-#define SCROLL_HISTORY 500
+#define SCROLL_HISTORY 10000
 /* printf format string for the tag in the status bar */
 #define TAG_SYMBOL   "[%s]"
 /* curses attributes for the currently selected tags */
@@ -54,7 +56,7 @@ static Color colors[] = {
 /* curses attributes for not selected tags which with urgent windows */
 #define TAG_URGENT (COLOR(BLUE) | A_NORMAL | A_BLINK)
 
-const char tags[][8] = { "1", "2", "3", "4", "5" };
+const char tags[][8] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
 
 #include "tile.c"
 #include "grid.c"
@@ -132,6 +134,12 @@ static KeyBinding bindings[] = {
 	{ { MOD, 'v', '0'      }, { view,           { NULL }                    } },
 	{ { MOD, 'v', '\t',    }, { viewprevtag,    { NULL }                    } },
 	{ { MOD, 't', '0'      }, { tag,            { NULL }                    } },
+	{ { CTRL('j')          }, { focusnext,      { NULL }                    } },
+	{ { MOD, CTRL('j')     }, { send,           { (const char[]){CTRL('j'),0} } } },
+	{ { CTRL('k')          }, { focusprev,      { NULL }                    } },
+	{ { MOD, CTRL('k')     }, { send,           { (const char[]){CTRL('k'),0} } } },
+	{ { CTRL('a')          }, { togglerunall,   { NULL }                    } },
+	{ { MOD, CTRL('a')     }, { send,           { (const char[]){CTRL('a'),0} } } },
 	TAGKEYS( '1',                              0)
 	TAGKEYS( '2',                              1)
 	TAGKEYS( '3',                              2)
