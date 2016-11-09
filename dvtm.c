@@ -366,7 +366,7 @@ drawbar(void) {
 	}
 
 	attrset(pertag.runinall[pertag.curtag] ? TAG_SEL : TAG_NORMAL);
-	addstr(layout->symbol);
+	printw(LAYOUT_SYMBOL, layout->symbol);
 	attrset(TAG_NORMAL);
 
 	if(keys) {
@@ -381,7 +381,7 @@ drawbar(void) {
 
 	getyx(stdscr, y, x);
 	(void)y;
-	int maxwidth = screen.w - x - 2;
+	int maxwidth = screen.w - x - 2 - strlen(layout->symbol);
 
 	addch(BAR_BEGIN);
 	attrset(BAR_ATTR);
