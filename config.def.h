@@ -229,4 +229,10 @@ static Action actions[] = {
 
 static char const * const keytable[] = {
 	/* add your custom key escape sequences */
+	[KEY_HOME] = "\e[1~",
+	[KEY_END]  = "\e[4~",
+	[KEY_F(1)] = "\eOP",
+	[KEY_F(2)] = "\eOQ",
+	[KEY_F(3)] = "\eOR",
+	[KEY_F(4)] = "\eOS",
 };
