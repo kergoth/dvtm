@@ -33,6 +33,7 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <pwd.h>
+#include <assert.h>
 #if defined __CYGWIN__ || defined __sun
 # include <termios.h>
 #endif
@@ -193,6 +194,7 @@ static void focusleft(const char *args[]);
 static void focusright(const char *args[]);
 static void killclient(const char *args[]);
 static void paste(const char *args[]);
+static void ext_cmd_paste(const char *args[]);
 static void quit(const char *args[]);
 static void redraw(const char *args[]);
 static void scrollback(const char *args[]);
@@ -1449,6 +1451,183 @@ static void
 paste(const char *args[]) {
 	if (sel && copyreg.data)
 		vt_write(sel->term, copyreg.data, copyreg.len);
+}
+
+size_t
+Register_bytes_avail(Register *reg) {
+	return reg->size - reg->len;
+}
+
+char*
+Register_append_addr(Register *reg) {
+	return reg->data + reg->len;
+}
+
+Register*
+Register_new(size_t initial_size) {
+	Register *reg = malloc(sizeof(*reg));
+	if (!reg) return NULL;
+
+	reg->data = malloc(initial_size);
+	if (!reg->data) {
+		// malloc for data failed, reg->data == NULL
+		free(reg);
+		return NULL;
+	}
+
+	reg->len = 0;
+	reg->size = initial_size;
+	return reg;
+}
+
+void
+Register_free(Register *reg) {
+	if (reg) {
+		free(reg->data);
+	}
+
+	free(reg);
+}
+
+Register*
+Register_embiggen(Register *reg, size_t how_much) {
+	assert(reg);
+
+	char *data;
+	size_t new_size = reg->size + how_much;
+
+	int size_ok = (SIZE_MAX > new_size) && (new_size > reg->size);
+	if (size_ok)
+		data = realloc(reg->data, new_size);
+
+	if (!data) {
+		// data couldn't be allocated, or target size was invalid
+		Register_free(reg);
+		return NULL;
+	}
+
+	reg->data = data;
+	reg->size = new_size;
+	return reg;
+}
+
+// errno set per read(2) if read failure encountered, partial read will be
+// returned
+Register*
+Register_read(Register *reg, int filedes_r, size_t amount_to_read) {
+	if (!reg)  return NULL;
+	if (amount_to_read == 0)  return reg;
+
+	ssize_t nbytes_read;
+	size_t how_much = 1024;
+
+	while (amount_to_read) {
+		if (!Register_bytes_avail(reg)) {
+			if (how_much > amount_to_read)
+				how_much = amount_to_read;
+
+			reg = Register_embiggen(reg, how_much);
+
+			if (!reg)  return NULL;
+		}
+
+		nbytes_read = read(
+			filedes_r,
+			Register_append_addr(reg),
+			Register_bytes_avail(reg)
+		);
+
+		if (nbytes_read == -1) {
+			if (!errno == EINTR)
+				break;
+			continue;  // signal interrupted us, try again
+		} else if (nbytes_read == 0) {
+			break;
+		} else {
+			// got some data, may be more to read
+			reg->len += (size_t)nbytes_read;
+			amount_to_read -= (size_t)nbytes_read;
+		}
+	}
+
+	return reg;
+}
+
+enum { PIPE_READ, PIPE_WRITE };
+
+Register*
+ext_cmd(const char *argv[], size_t amount_to_read) {
+	int filedes[2];
+	int pipe_status, child_status;
+	Register *cmd_output = NULL;
+
+	pipe_status = pipe(filedes);
+	if (pipe_status == -1) {
+		perror("Couldn't open pipe");
+		return NULL;
+	}
+
+	pid_t pid = fork();
+	if (pid == -1) {
+		perror("Unable to fork process");
+		return NULL;
+	} else if (pid == 0) {
+		// child process
+		close(filedes[PIPE_READ]);
+		dup2(filedes[PIPE_WRITE], STDOUT_FILENO);
+		close(filedes[PIPE_WRITE]);
+
+		// close other file handles (code taken from vt.c's vt_forkpty)
+		int maxfd = sysconf(_SC_OPEN_MAX);
+		for (int fd = 3; fd < maxfd; fd++)
+			if (close(fd) == -1 && errno == EBADF)
+				break;
+
+		int devnull = open("/dev/null", O_WRONLY);
+		if (devnull == -1) {
+			perror("Unable to redirect stderr to /dev/null");
+		} else {
+			dup2(devnull, STDERR_FILENO);
+			close(devnull);
+			execvp(argv[0], (char *const *)argv);
+		}
+
+		// only reach this if fork failed or we couldn't redirect stderr
+		exit(EXIT_FAILURE);
+	} else {
+		// parent process
+		close(filedes[PIPE_WRITE]);
+		cmd_output = Register_read(
+			Register_new(500),
+			filedes[PIPE_READ],
+			amount_to_read
+		);
+
+		// Register_read blocks until it's gotten as much data as it wants (or
+		// something went wrong); so tell child process to terminate once we've
+		// reached here (then wait for it to exit before proceeding)
+		kill(pid, SIGTERM);
+		waitpid(pid, &child_status, 0);
+		close(filedes[PIPE_READ]);
+
+		if ( !(cmd_output && cmd_output->len > 0) ) {
+			Register_free(cmd_output);
+			cmd_output = NULL;
+		}
+	}
+
+	return cmd_output;
+}
+
+static void
+ext_cmd_paste(const char *argv[]) {
+	Register *cmd_output = ext_cmd(argv, 65536);
+
+	if (sel && cmd_output) {
+		vt_write(sel->term, cmd_output->data, cmd_output->len);
+	}
+
+	Register_free(cmd_output);
 }
 
 static void
