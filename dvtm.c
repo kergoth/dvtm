@@ -369,8 +369,14 @@ drawbar(void) {
 		else
 			attrset(TAG_NORMAL);
 		printw(TAG_SYMBOL, tags[i]);
+		if (i < LENGTH(tags) - 1) {
+			attrset(TAG_NORMAL);
+			printw(TAG_SEP);
+		}
 	}
 
+	attrset(TAG_NORMAL);
+	printw(LAYOUT_SEP);
 	attrset(pertag.runinall[pertag.curtag] ? TAG_SEL : TAG_NORMAL);
 	printw(LAYOUT_SYMBOL, layout->symbol);
 	attrset(TAG_NORMAL);

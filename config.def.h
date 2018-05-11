@@ -33,8 +33,8 @@ static Color colors[] = {
 /* curses attributes for the status bar */
 #define BAR_ATTR        (COLOR(BLUE) | A_NORMAL)
 /* characters for beginning and end of status bar message */
-#define BAR_BEGIN       '['
-#define BAR_END         ']'
+#define BAR_BEGIN       ' '
+#define BAR_END         ' '
 /* status bar (command line option -s) position */
 #define BAR_POS         BAR_TOP /* BAR_BOTTOM, BAR_OFF */
 /* whether status bar should be hidden if only one client exists */
@@ -46,7 +46,9 @@ static Color colors[] = {
 /* scroll back buffer size in lines */
 #define SCROLL_HISTORY 10000
 /* printf format string for the tag in the status bar */
-#define TAG_SYMBOL   "[%s]"
+#define TAG_SYMBOL   " %s "
+#define TAG_SEP      "|"
+#define LAYOUT_SEP   "  "
 /* curses attributes for the currently selected tags */
 #define TAG_SEL      (COLOR(BLUE) | A_BOLD)
 /* curses attributes for not selected tags which contain no windows */
@@ -67,10 +69,10 @@ const char tags[][8] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
 
 /* by default the first layout entry is used */
 static Layout layouts[] = {
-	{ "[]=", tile },
-	{ "+++", grid },
-	{ "TTT", bstack },
-	{ "[ ]", fullscreen },
+	{ "│├┤", tile },
+	{ "├┼┤", grid },
+	{ "├┬┤", bstack },
+	{ "│ │", fullscreen },
 };
 
 #define MOD  CTRL('g')
@@ -91,10 +93,10 @@ static KeyBinding bindings[] = {
 	{ { MOD, 'H',          }, { focusleft,      { NULL }                    } },
 	{ { MOD, 'L',          }, { focusright,     { NULL }                    } },
 	{ { MOD, 'k',          }, { focusprev,      { NULL }                    } },
-	{ { MOD, 'f',          }, { setlayout,      { "[]=" }                   } },
-	{ { MOD, 'g',          }, { setlayout,      { "+++" }                   } },
-	{ { MOD, 'b',          }, { setlayout,      { "TTT" }                   } },
-	{ { MOD, 'm',          }, { setlayout,      { "[ ]" }                   } },
+	{ { MOD, 'f',          }, { setlayout,      { "│├┤" }                   } },
+	{ { MOD, 'g',          }, { setlayout,      { "├┼┤" }                   } },
+	{ { MOD, 'b',          }, { setlayout,      { "├┬┤" }                   } },
+	{ { MOD, 'm',          }, { setlayout,      { "│ │" }                   } },
 	{ { MOD, ' ',          }, { setlayout,      { NULL }                    } },
 	{ { MOD, 'i',          }, { incnmaster,     { "+1" }                    } },
 	{ { MOD, 'd',          }, { incnmaster,     { "-1" }                    } },
@@ -150,6 +152,10 @@ static KeyBinding bindings[] = {
 	TAGKEYS( '3',                              2)
 	TAGKEYS( '4',                              3)
 	TAGKEYS( '5',                              4)
+	TAGKEYS( '6',                              5)
+	TAGKEYS( '7',                              6)
+	TAGKEYS( '8',                              7)
+	TAGKEYS( '9',                              8)
 };
 
 static const ColorRule colorrules[] = {
@@ -194,7 +200,7 @@ static const ColorRule colorrules[] = {
 #ifdef CONFIG_MOUSE
 static Button buttons[] = {
 	{ BUTTON1_CLICKED,        { mouse_focus,      { NULL  } } },
-	{ BUTTON1_DOUBLE_CLICKED, { mouse_fullscreen, { "[ ]" } } },
+	{ BUTTON1_DOUBLE_CLICKED, { mouse_fullscreen, { "│ │" } } },
 	{ BUTTON2_CLICKED,        { mouse_zoom,       { NULL  } } },
 	{ BUTTON3_CLICKED,        { mouse_minimize,   { NULL  } } },
 };
