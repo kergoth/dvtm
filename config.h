@@ -33,8 +33,8 @@ static Color colors[] = {
 /* curses attributes for the status bar */
 #define BAR_ATTR        (COLOR(BLUE) | A_NORMAL)
 /* characters for beginning and end of status bar message */
-#define BAR_BEGIN       '['
-#define BAR_END         ']'
+#define BAR_BEGIN       ' '
+#define BAR_END         ' '
 /* status bar (command line option -s) position */
 #define BAR_POS         BAR_TOP /* BAR_BOTTOM, BAR_OFF */
 /* whether status bar should be hidden if only one client exists */
@@ -47,6 +47,8 @@ static Color colors[] = {
 #define SCROLL_HISTORY 10000
 /* printf format string for the tag in the status bar */
 #define TAG_SYMBOL   " %s "
+#define TAG_SEP      "|"
+#define LAYOUT_SEP   "  "
 /* curses attributes for the currently selected tags */
 #define TAG_SEL      (COLOR(BLUE) | A_BOLD)
 /* curses attributes for not selected tags which contain no windows */
@@ -56,7 +58,7 @@ static Color colors[] = {
 /* curses attributes for not selected tags which with urgent windows */
 #define TAG_URGENT (COLOR(BLUE) | A_NORMAL | A_BLINK)
 /* printf format string for the layout in the status bar */
-#define LAYOUT_SYMBOL " %s "
+#define LAYOUT_SYMBOL "%s"
 
 const char tags[][8] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
 
@@ -67,10 +69,10 @@ const char tags[][8] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
 
 /* by default the first layout entry is used */
 static Layout layouts[] = {
-	{ "[]=", tile },
-	{ "+++", grid },
-	{ "TTT", bstack },
-	{ "[ ]", fullscreen },
+	{ "│├┤", tile },
+	{ "├┼┤", grid },
+	{ "├┬┤", bstack },
+	{ "│ │", fullscreen },
 };
 
 #define MOD  CTRL('g')
@@ -86,13 +88,15 @@ static KeyBinding bindings[] = {
 	{ { MOD, 'C',          }, { create,         { NULL, NULL, "$CWD" }      } },
 	{ { MOD, 'x', 'x',     }, { killclient,     { NULL }                    } },
 	{ { MOD, 'j',          }, { focusnext,      { NULL }                    } },
-	{ { MOD, 'J',          }, { focusnextnm,    { NULL }                    } },
-	{ { MOD, 'K',          }, { focusprevnm,    { NULL }                    } },
+	{ { MOD, 'J',          }, { focusdown,      { NULL }                    } },
+	{ { MOD, 'K',          }, { focusup,        { NULL }                    } },
+	{ { MOD, 'H',          }, { focusleft,      { NULL }                    } },
+	{ { MOD, 'L',          }, { focusright,     { NULL }                    } },
 	{ { MOD, 'k',          }, { focusprev,      { NULL }                    } },
-	{ { MOD, 'f',          }, { setlayout,      { "[]=" }                   } },
-	{ { MOD, 'g',          }, { setlayout,      { "+++" }                   } },
-	{ { MOD, 'b',          }, { setlayout,      { "TTT" }                   } },
-	{ { MOD, 'm',          }, { setlayout,      { "[ ]" }                   } },
+	{ { MOD, 'f',          }, { setlayout,      { "│├┤" }                   } },
+	{ { MOD, 'g',          }, { setlayout,      { "├┼┤" }                   } },
+	{ { MOD, 'b',          }, { setlayout,      { "├┬┤" }                   } },
+	{ { MOD, 'm',          }, { setlayout,      { "│ │" }                   } },
 	{ { MOD, ' ',          }, { setlayout,      { NULL }                    } },
 	{ { MOD, 'i',          }, { incnmaster,     { "+1" }                    } },
 	{ { MOD, 'd',          }, { incnmaster,     { "-1" }                    } },
@@ -118,8 +122,9 @@ static KeyBinding bindings[] = {
 	{ { MOD, 'a',          }, { togglerunall,   { NULL }                    } },
 	{ { MOD, CTRL('L'),    }, { redraw,         { NULL }                    } },
 	{ { MOD, 'r',          }, { redraw,         { NULL }                    } },
-	{ { MOD, 'e',          }, { copymode,       { NULL }                    } },
-	{ { MOD, '/',          }, { copymode,       { "/" }                     } },
+	{ { MOD, 'e',          }, { copymode,       { "dvtm-editor" }           } },
+	{ { MOD, 'E',          }, { copymode,       { "dvtm-pager" }            } },
+	{ { MOD, '/',          }, { copymode,       { "dvtm-pager", "/" }       } },
 	{ { MOD, 'p',          }, { paste,          { NULL }                    } },
 	{ { MOD, KEY_PPAGE,    }, { scrollback,     { "-1" }                    } },
 	{ { MOD, KEY_NPAGE,    }, { scrollback,     { "1"  }                    } },
@@ -199,7 +204,7 @@ static const ColorRule colorrules[] = {
 #ifdef CONFIG_MOUSE
 static Button buttons[] = {
 	{ BUTTON1_CLICKED,        { mouse_focus,      { NULL  } } },
-	{ BUTTON1_DOUBLE_CLICKED, { mouse_fullscreen, { "[ ]" } } },
+	{ BUTTON1_DOUBLE_CLICKED, { mouse_fullscreen, { "│ │" } } },
 	{ BUTTON2_CLICKED,        { mouse_zoom,       { NULL  } } },
 	{ BUTTON3_CLICKED,        { mouse_minimize,   { NULL  } } },
 };
@@ -228,20 +233,10 @@ static Action actions[] = {
 
 static char const * const keytable[] = {
 	/* add your custom key escape sequences */
-};
-
-/* editor to use for copy mode. If neither of DVTM_EDITOR, EDITOR and PAGER is
- * set the first entry is chosen. Otherwise the array is consulted for supported
- * options. A %d in argv is replaced by the line number at which the file should
- * be opened. If filter is true the editor is expected to work even if stdout is
- * redirected (i.e. not a terminal). If color is true then color escape sequences
- * are generated in the output.
- */
-static Editor editors[] = {
-	{ .name = "vis",         .argv = { "vis", "+%d", "-", NULL   }, .filter = true,  .color = false },
-	{ .name = "sandy",       .argv = { "sandy", "-d", "-", NULL  }, .filter = true,  .color = false },
-	{ .name = "dvtm-editor", .argv = { "dvtm-editor", "-", NULL  }, .filter = true,  .color = false },
-	{ .name = "vim",         .argv = { "vim", "+%d", "-", NULL   }, .filter = false, .color = false },
-	{ .name = "less",        .argv = { "less", "-R", "+%d", NULL }, .filter = false, .color = true  },
-	{ .name = "more",        .argv = { "more", "+%d", NULL       }, .filter = false, .color = false },
+	[KEY_HOME] = "\e[1~",
+	[KEY_END]  = "\e[4~",
+	[KEY_F(1)] = "\eOP",
+	[KEY_F(2)] = "\eOQ",
+	[KEY_F(3)] = "\eOR",
+	[KEY_F(4)] = "\eOS",
 };
