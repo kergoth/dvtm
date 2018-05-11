@@ -1,16 +1,9 @@
-# normal ignores
-.*
-*.[ao]
-*.lo
-*.so
-tags
-!.gitignore
-
-# top-level ignores
+/config.h
 /dvtm
 /log
 /log
 /debug
 /patches
-
-config.h
+/dvtm-editor
+*.css
+*.html

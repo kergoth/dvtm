@@ -14,6 +14,8 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <wchar.h>
+#include <limits.h>
+#include <libgen.h>
 #include <sys/select.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
@@ -190,6 +192,10 @@ static void focusnextnm(const char *args[]);
 static void focusprev(const char *args[]);
 static void focusprevnm(const char *args[]);
 static void focuslast(const char *args[]);
+static void focusup(const char *args[]);
+static void focusdown(const char *args[]);
+static void focusleft(const char *args[]);
+static void focusright(const char *args[]);
 static void killclient(const char *args[]);
 static void paste(const char *args[]);
 static void quit(const char *args[]);
@@ -708,7 +714,7 @@ resize(Client *c, int x, int y, int w, int h) {
 
 static Client*
 get_client_by_coord(unsigned int x, unsigned int y) {
-	if (y < way || y >= wah)
+	if (y < way || y >= way+wah)
 		return NULL;
 	if (isarrange(fullscreen))
 		return sel;
@@ -969,14 +975,20 @@ viewprevtag(const char *args[]) {
 
 static void
 keypress(int code) {
+	int key = -1;
 	unsigned int len = 1;
 	char buf[8] = { '\e' };
 
 	if (code == '\e') {
 		/* pass characters following escape to the underlying app */
 		nodelay(stdscr, TRUE);
-		for (int t; len < sizeof(buf) && (t = getch()) != ERR; len++)
+		for (int t; len < sizeof(buf) && (t = getch()) != ERR; len++) {
+			if (t > 255) {
+				key = t;
+				break;
+			}
 			buf[len] = t;
+		}
 		nodelay(stdscr, FALSE);
 	}
 
@@ -987,6 +999,8 @@ keypress(int code) {
 				vt_write(c->term, buf, len);
 			else
 				vt_keypress(c->term, code);
+			if (key != -1)
+				vt_keypress(c->term, key);
 		}
 		if (!pertag.runinall[pertag.curtag])
 			break;
@@ -1173,11 +1187,20 @@ create(const char *args[]) {
 		return;
 	}
 
-	c->cmd = (args && args[0]) ? args[0] : shell;
-	if (args && args[1]) {
-		strncpy(c->title, args[1], sizeof(c->title) - 1);
-		c->title[sizeof(c->title) - 1] = '\0';
+	if (args && args[0]) {
+		c->cmd = args[0];
+		char name[PATH_MAX];
+		strncpy(name, args[0], sizeof(name));
+		name[sizeof(name)-1] = '\0';
+		strncpy(c->title, basename(name), sizeof(c->title));
+	} else {
+		c->cmd = shell;
 	}
+
+	if (args && args[1])
+		strncpy(c->title, args[1], sizeof(c->title));
+	c->title[sizeof(c->title)-1] = '\0';
+
 	if (args && args[2])
 		cwd = !strcmp(args[2], "$CWD") ? getcwd_by_pid(sel) : (char*)args[2];
 	c->pid = vt_forkpty(c->term, shell, pargs, cwd, env, NULL, NULL);
@@ -1186,6 +1209,7 @@ create(const char *args[]) {
 	vt_data_set(c->term, c);
 	vt_title_handler_set(c->term, term_title_handler);
 	vt_urgent_handler_set(c->term, term_urgent_handler);
+	applycolorrules(c);
 	c->x = wax;
 	c->y = way;
 	debug("client with pid %d forked\n", c->pid);
@@ -1196,45 +1220,25 @@ create(const char *args[]) {
 
 static void
 copymode(const char *args[]) {
-	if (!sel || sel->editor)
+	if (!args || !args[0] || !sel || sel->editor)
 		return;
+
+	bool colored = strstr(args[0], "pager") != NULL;
+
 	if (!(sel->editor = vt_create(sel->h - sel->has_title_line, sel->w, 0)))
 		return;
 
-	char *ed = getenv("DVTM_EDITOR");
-	int *to = &sel->editor_fds[0], *from = NULL;
+	int *to = &sel->editor_fds[0];
+	int *from = strstr(args[0], "editor") ? &sel->editor_fds[1] : NULL;
 	sel->editor_fds[0] = sel->editor_fds[1] = -1;
 
-	if (!ed)
-		ed = getenv("EDITOR");
-	if (!ed)
-		ed = getenv("PAGER");
-	if (!ed)
-		ed = editors[0].name;
-
-	const char **argv = (const char*[]){ ed, "-", NULL, NULL };
+	const char *argv[3] = { args[0], NULL, NULL };
 	char argline[32];
-	bool colored = false;
+	int line = vt_content_start(sel->app);
+	snprintf(argline, sizeof(argline), "+%d", line);
+	argv[1] = argline;
 
-	for (unsigned int i = 0; i < LENGTH(editors); i++) {
-		if (!strcmp(editors[i].name, ed)) {
-			for (int j = 1; editors[i].argv[j]; j++) {
-				if (strstr(editors[i].argv[j], "%d")) {
-					int line = vt_content_start(sel->app);
-					snprintf(argline, sizeof(argline), "+%d", line);
-					argv[j] = argline;
-				} else {
-					argv[j] = editors[i].argv[j];
-				}
-			}
-			if (editors[i].filter)
-				from = &sel->editor_fds[1];
-			colored = editors[i].color;
-			break;
-		}
-	}
-
-	if (vt_forkpty(sel->editor, ed, argv, NULL, NULL, to, from) < 0) {
+	if (vt_forkpty(sel->editor, args[0], argv, NULL, NULL, to, from) < 0) {
 		vt_destroy(sel->editor);
 		sel->editor = NULL;
 		return;
@@ -1261,8 +1265,8 @@ copymode(const char *args[]) {
 		sel->editor_fds[0] = -1;
 	}
 
-	if (args[0])
-		vt_write(sel->editor, args[0], strlen(args[0]));
+	if (args[1])
+		vt_write(sel->editor, args[1], strlen(args[1]));
 }
 
 static void
@@ -1355,6 +1359,51 @@ static void
 focuslast(const char *args[]) {
 	if (lastsel)
 		focus(lastsel);
+}
+
+static void
+focusup(const char *args[]) {
+	if (!sel)
+		return;
+	/* avoid vertical separator, hence +1 in x direction */
+	Client *c = get_client_by_coord(sel->x + 1, sel->y - 1);
+	if (c)
+		focus(c);
+	else
+		focusprev(args);
+}
+
+static void
+focusdown(const char *args[]) {
+	if (!sel)
+		return;
+	Client *c = get_client_by_coord(sel->x, sel->y + sel->h);
+	if (c)
+		focus(c);
+	else
+		focusnext(args);
+}
+
+static void
+focusleft(const char *args[]) {
+	if (!sel)
+		return;
+	Client *c = get_client_by_coord(sel->x - 2, sel->y);
+	if (c)
+		focus(c);
+	else
+		focusprev(args);
+}
+
+static void
+focusright(const char *args[]) {
+	if (!sel)
+		return;
+	Client *c = get_client_by_coord(sel->x + sel->w + 1, sel->y);
+	if (c)
+		focus(c);
+	else
+		focusnext(args);
 }
 
 static void
