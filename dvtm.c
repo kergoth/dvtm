@@ -46,10 +46,6 @@ int ESCDELAY;
 # define set_escdelay(d) (ESCDELAY = (d))
 #endif
 
-int selfpipe[2];
-#define SELFPIPE_READ 0
-#define SELFPIPE_WRITE 1
-
 typedef struct {
 	float mfact;
 	unsigned int nmaster;
@@ -762,7 +758,6 @@ get_tag_by_coord(unsigned int x, unsigned int y) {
 static void
 sigchld_handler(int sig) {
 	screen.need_check_deaths = true;
-	write(selfpipe[SELFPIPE_WRITE], "", 1);
 }
 
 static void
@@ -801,13 +796,11 @@ check_deaths() {
 static void
 sigwinch_handler(int sig) {
 	screen.need_resize = true;
-	write(selfpipe[SELFPIPE_WRITE], "", 1);
 }
 
 static void
 sigterm_handler(int sig) {
 	running = false;
-	write(selfpipe[SELFPIPE_WRITE], "", 1);
 }
 
 static void
@@ -1089,7 +1082,6 @@ setup(void) {
 	}
 	initpertag();
 	resize_screen();
-	pipe(selfpipe);
 	struct sigaction sa;
 	memset(&sa, 0, sizeof sa);
 	sa.sa_flags = 0;
@@ -1974,12 +1966,19 @@ int
 main(int argc, char *argv[]) {
 	unsigned int key_index = 0;
 	memset(keys, 0, sizeof(keys));
+	sigset_t emptyset, blockset;
 
 	setenv("DVTM", VERSION, 1);
 	if (!parse_args(argc, argv)) {
 		setup();
 		startup(NULL);
 	}
+
+	sigemptyset(&emptyset);
+	sigemptyset(&blockset);
+	sigaddset(&blockset, SIGWINCH);
+	sigaddset(&blockset, SIGCHLD);
+	sigprocmask(SIG_BLOCK, &blockset, NULL);
 
 	while (running) {
 		int r, nfds = 0;
@@ -1997,12 +1996,10 @@ main(int argc, char *argv[]) {
 
 		FD_ZERO(&rd);
 		FD_SET(STDIN_FILENO, &rd);
-		FD_SET(selfpipe[SELFPIPE_READ], &rd);
-		nfds = MAX(nfds, selfpipe[SELFPIPE_READ]);
 
 		if (cmdfifo.fd != -1) {
 			FD_SET(cmdfifo.fd, &rd);
-			nfds = MAX(nfds, cmdfifo.fd);
+			nfds = cmdfifo.fd;
 		}
 
 		if (bar.fd != -1) {
@@ -2026,7 +2023,7 @@ main(int argc, char *argv[]) {
 		}
 
 		doupdate();
-		r = select(nfds + 1, &rd, NULL, NULL, NULL);
+		r = pselect(nfds + 1, &rd, NULL, NULL, NULL, &emptyset);
 
 		if (r < 0) {
 			if (errno == EINTR)
@@ -2063,11 +2060,6 @@ main(int argc, char *argv[]) {
 			}
 			if (r == 1) /* no data available on pty's */
 				continue;
-		}
-
-		if (FD_ISSET(selfpipe[SELFPIPE_READ], &rd)) {
-			char buf[8];
-			read(selfpipe[SELFPIPE_READ], &buf, sizeof(buf));
 		}
 
 		if (cmdfifo.fd != -1 && FD_ISSET(cmdfifo.fd, &rd))
