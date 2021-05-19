@@ -382,14 +382,11 @@ drawbar(void) {
 	printw(LAYOUT_SYMBOL, layout->symbol);
 	attrset(TAG_NORMAL);
 
-	if(keys) {
-		unsigned int keycount = 0;
-		while (keycount < MAX_KEYS && keys[keycount]) {
-			if (keys[keycount] < ' ')
-				printw("^%c", 'a' - 1 + keys[keycount++]);
-			else
-				printw("%c", keys[keycount++]);
-		}
+	for (unsigned int i = 0; i < MAX_KEYS && keys[i]; i++) {
+		if (keys[i] < ' ')
+			printw("^%c", 'A' - 1 + keys[i]);
+		else
+			printw("%c", keys[i]);
 	}
 
 	getyx(stdscr, y, x);
@@ -596,6 +593,7 @@ settitle(Client *c) {
 	if (t && (term = getenv("TERM")) && !strstr(term, "linux")) {
 		printf("\033]0;%s\007", t);
 		fflush(stdout);
+		wnoutrefresh(c->window);
 	}
 }
 
@@ -1271,7 +1269,8 @@ copymode(const char *args[]) {
 	snprintf(argline, sizeof(argline), "+%d", line);
 	argv[1] = argline;
 
-	if (vt_forkpty(sel->editor, args[0], argv, NULL, NULL, to, from) < 0) {
+	char *cwd = getcwd_by_pid(sel);
+	if (vt_forkpty(sel->editor, args[0], argv, cwd, NULL, to, from) < 0) {
 		vt_destroy(sel->editor);
 		sel->editor = NULL;
 		return;
@@ -2160,11 +2159,12 @@ parse_args(int argc, char *argv[]) {
 				updatebarpos();
 				break;
 			case 'c': {
-				const char *fifo;
+				char *fifo;
 				cmdfifo.fd = open_or_create_fifo(argv[++arg], &cmdfifo.file);
 				if (!(fifo = realpath(argv[arg], NULL)))
 					error("%s\n", strerror(errno));
 				setenv("DVTM_CMD_FIFO", fifo, 1);
+				free(fifo);
 				break;
 			}
 			default:
